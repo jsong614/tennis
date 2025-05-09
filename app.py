@@ -63,3 +63,28 @@ if st.session_state.teams is not None:
 
     csv = st.session_state.teams.to_csv(index=False).encode('utf-8-sig')
     st.download_button("📤 결과 CSV 다운로드", data=csv, file_name="혼복_조편성결과.csv", mime='text/csv')
+
+
+if st.session_state.teams is not None:
+    df = st.session_state.teams.copy()
+    df['순위'] = None  # 순위 입력 열 추가
+
+    st.subheader("🏅 각 조별 결과 입력")
+
+    for group in sorted(df['조'].unique()):
+        st.markdown(f"### ⛳ {group}")
+        group_df = df[df['조'] == group]
+        for i, row in group_df.iterrows():
+            rank = st.number_input(
+                f"{row['팀']} (순위 입력)", 
+                min_value=1, max_value=10, step=1,
+                key=f"{group}_{row['팀']}"
+            )
+            df.at[i, '순위'] = rank
+
+    st.subheader("✅ 최종 결과")
+    st.dataframe(df)
+
+    csv_result = df.to_csv(index=False).encode('utf-8-sig')
+    st.download_button("📥 순위 포함 결과 CSV 다운로드", data=csv_result, file_name="혼복_조별순위결과.csv", mime="text/csv")
+
