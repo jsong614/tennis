@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 
-st.title("🎾 테니스 대회 복식 조 편성기 (숫자 조 이름 + 2팀 조 허용)")
+st.title("조 편성 프로그램")
 
 uploaded_file = st.file_uploader("📥 CSV 파일 업로드", type="csv")
 
