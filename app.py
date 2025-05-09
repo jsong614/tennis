@@ -3,9 +3,9 @@ import pandas as pd
 import random
 import math
 
-st.title("🎾 테니스 대회 복식 조 편성기 (팀 기준, 3팀 조)")
+st.title("🎾 테니스 대회 복식 조 편성기 (팀 단위)")
 
-uploaded_file = st.file_uploader("📥 혼복 CSV 파일 업로드", type="csv")
+uploaded_file = st.file_uploader("📥 CSV 파일 업로드", type="csv")
 
 if 'teams' not in st.session_state:
     st.session_state.teams = None
@@ -13,7 +13,7 @@ if 'teams' not in st.session_state:
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # 팀 단위로 이름/연락처 구성
+    # 팀 단위로 구성
     teams = []
     for _, row in df.iterrows():
         if pd.notna(row['이름 1 (대표자)']) and pd.notna(row['이름 2']):
@@ -33,25 +33,25 @@ if uploaded_file:
         remainder = total % 3
 
         group_sizes = [3] * num_full_groups
-        if remainder == 1:
+        if remainder == 1 and num_full_groups >= 1:
             group_sizes[-1] = 2
         elif remainder == 2:
             group_sizes.append(2)
 
         group_labels = [chr(65 + i) + "조" for i in range(len(group_sizes))]
 
+        # 조 배정 리스트 정확히 팀 수만큼 만들기
         group_assignments = []
-        idx = 0
-        for i, size in enumerate(group_sizes):
-            for _ in range(size):
-                group_assignments.append(group_labels[i])
-                idx += 1
+        i = 0
+        for size in group_sizes:
+            group_assignments.extend([group_labels[i]] * size)
+            i += 1
 
-        team_df['조'] = group_assignments
+        team_df['조'] = group_assignments[:len(team_df)]
         st.session_state.teams = team_df
 
 if st.session_state.teams is not None:
-    st.subheader("✅ 조 편성 결과 (팀 기준)")
+    st.subheader("✅ 조 편성 결과 (팀 단위)")
     st.dataframe(st.session_state.teams)
 
     csv = st.session_state.teams.to_csv(index=False).encode('utf-8-sig')
