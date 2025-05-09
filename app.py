@@ -1,85 +1,58 @@
 import streamlit as st
 import pandas as pd
+import random
 import math
-import matplotlib.pyplot as plt
-from PIL import Image
-import io
-import matplotlib.font_manager as fm
 
-# 한글 폰트 설정
-try:
-    font_path = "/Users/songjasong/Library/Fonts/NanumSquareR.ttf"
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rc('font', family=font_prop.get_name())
-except:
-    pass
+st.title("🎾 테니스 대회 복식 조 편성기 (팀 단위)")
 
-st.set_page_config(layout="wide")
-st.title("🎾 예선 순위 입력 + 본선 대진표 생성기 (기존 CSV 포맷 사용)")
+uploaded_file = st.file_uploader("📥 CSV 파일 업로드", type="csv")
 
-uploaded_file = st.file_uploader("📥 CSV 업로드 ('이름 1 (대표자)', '이름 2', '조' 포함)", type="csv")
+if 'teams' not in st.session_state:
+    st.session_state.teams = None
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    if not {'이름 1 (대표자)', '이름 2', '조'}.issubset(df.columns):
-        st.error("❗ '이름 1 (대표자)', '이름 2', '조' 열이 CSV에 포함되어야 합니다.")
-    else:
-        # 팀 이름 생성
-        df['팀'] = df['이름 1 (대표자)'].astype(str) + " / " + df['이름 2'].astype(str)
-        df['순위'] = None
+    # 팀 단위로 구성
+    teams = []
+    for _, row in df.iterrows():
+        if pd.notna(row['이름 1 (대표자)']) and pd.notna(row['이름 2']):
+            팀이름 = f"{row['이름 1 (대표자)']} / {row['이름 2']}"
+            연락처 = row['연락처 1']
+            teams.append({'팀': 팀이름, '대표자 연락처': 연락처})
 
-        st.subheader("📌 각 조별 순위 입력")
-        for group in sorted(df['조'].dropna().unique()):
-            st.markdown(f"### ⛳ {group}")
-            teams_in_group = df[df['조'] == group]
-            for i, row in teams_in_group.iterrows():
-                rank = st.number_input(
-                    f"{row['팀']}의 순위",
-                    min_value=1, max_value=10, step=1,
-                    key=f"{group}_{row['팀']}"
-                )
-                df.at[i, '순위'] = rank
+    team_df = pd.DataFrame(teams)
 
-        if st.button("✅ 본선 진출팀으로 대진표 생성"):
-            qualified = df[df['순위'] <= 2].copy()
-            teams = qualified['팀'].dropna().tolist()
+    st.subheader("📋 복식 팀 목록")
+    st.dataframe(team_df)
 
-            draw_size = len(teams)
-            if draw_size < 2 or (draw_size & (draw_size - 1)) != 0:
-                st.error(f"❗ 본선 진출팀 수는 2의 제곱이어야 합니다. 현재: {draw_size}팀")
-            else:
-                st.success(f"🎉 본선 진출팀 {draw_size}팀 → 브래킷 생성 중")
+    if st.button("🎲 랜덤으로 조 편성"):
+        team_df = team_df.sample(frac=1, random_state=42).reset_index(drop=True)
+        total = len(team_df)
+        num_full_groups = total // 3
+        remainder = total % 3
 
-                rounds = int(math.log2(draw_size))
-                fig, ax = plt.subplots(figsize=(12, draw_size * 0.45))
-                ax.set_xlim(0, rounds + 1)
-                ax.set_ylim(0, draw_size)
-                ax.axis('off')
+        group_sizes = [3] * num_full_groups
+        if remainder == 1 and num_full_groups >= 1:
+            group_sizes[-1] = 2
+        elif remainder == 2:
+            group_sizes.append(2)
 
-                positions = {}
-                for i, name in enumerate(teams):
-                    y = draw_size - i - 1
-                    ax.text(0, y, name, va='center', fontsize=10)
-                    positions[(0, i)] = y
+        group_labels = [chr(65 + i) + "조" for i in range(len(group_sizes))]
 
-                for r in range(1, rounds + 1):
-                    step = 2 ** r
-                    for m in range(0, draw_size, step):
-                        left = positions.get((r - 1, m))
-                        right = positions.get((r - 1, m + step // 2))
-                        if left is not None and right is not None:
-                            mid = (left + right) / 2
-                            ax.plot([r - 1, r - 1], [left, right], color='black')
-                            ax.plot([r - 1, r], [mid, mid], color='black')
-                            positions[(r, m)] = mid
+        # 조 배정 리스트 정확히 팀 수만큼 만들기
+        group_assignments = []
+        i = 0
+        for size in group_sizes:
+            group_assignments.extend([group_labels[i]] * size)
+            i += 1
 
-                buf = io.BytesIO()
-                plt.tight_layout()
-                plt.savefig(buf, format="png", dpi=150)
-                buf.seek(0)
-                image = Image.open(buf)
+        team_df['조'] = group_assignments[:len(team_df)]
+        st.session_state.teams = team_df
 
-                st.image(image, caption="📊 본선 대진표 (브래킷)", use_column_width=True)
-                st.download_button("📥 브래킷 PNG 다운로드", data=buf.getvalue(), file_name="bracket.png", mime="image/png")
+if st.session_state.teams is not None:
+    st.subheader("✅ 조 편성 결과 (팀 단위)")
+    st.dataframe(st.session_state.teams)
 
+    csv = st.session_state.teams.to_csv(index=False).encode('utf-8-sig')
+    st.download_button("📤 결과 CSV 다운로드", data=csv, file_name="혼복_조편성결과.csv", mime='text/csv')
