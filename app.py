@@ -47,8 +47,12 @@ if uploaded_file:
         for i, size in enumerate(group_sizes):
             group_assignments.extend([group_labels[i]] * size)
 
-        # 혹시 모를 길이 차이 방지
-        group_assignments = group_assignments[:len(team_df)]
+        # 💡 길이 보정 (안전하게)
+        diff = len(team_df) - len(group_assignments)
+        if diff > 0:
+            group_assignments += [group_labels[-1]] * diff
+        elif diff < 0:
+            group_assignments = group_assignments[:len(team_df)]
 
         team_df['조'] = group_assignments
         st.session_state.teams = team_df
