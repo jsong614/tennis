@@ -1,130 +1,63 @@
 import streamlit as st
 import pandas as pd
 import math
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+from PIL import Image
+import io
+import matplotlib.font_manager as fm
 
-st.set_page_config(page_title="🎾 테니스 대회 대진표", layout="wide")
-st.title("🎾 혼합복식 조 편성 및 본선 대진표 시각화")
+# 📌 한글 폰트 설정 (환경 맞춰 조정)
+try:
+    font_path = "/Users/songjasong/Library/Fonts/NanumSquareR.ttf"
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rc('font', family=font_prop.get_name())
+except:
+    pass
 
-uploaded_file = st.file_uploader("📥 CSV 업로드 (이름1, 이름2, 연락처1)", type="csv")
+st.set_page_config(layout="wide")
+st.title("🎾 혼복 본선 대진표 브래킷 생성기 (CSV 기반)")
 
-if 'teams' not in st.session_state:
-    st.session_state.teams = None
-if 'draw_teams' not in st.session_state:
-    st.session_state.draw_teams = None
+uploaded_file = st.file_uploader("📥 팀명('팀' 열 포함) CSV 파일 업로드", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    # 팀 구성
-    teams = []
-    for _, row in df.iterrows():
-        if pd.notna(row['이름 1 (대표자)']) and pd.notna(row['이름 2']):
-            팀이름 = f"{row['이름 1 (대표자)']} / {row['이름 2']}"
-            연락처 = row['연락처 1']
-            teams.append({'팀': 팀이름, '연락처': 연락처})
-    team_df = pd.DataFrame(teams)
+    if '팀' not in df.columns:
+        st.error("❗ CSV에 '팀'이라는 열이 있어야 합니다.")
+    else:
+        teams = df['팀'].dropna().tolist()
+        draw_size = len(teams)
 
-    st.subheader("📋 참가 팀 목록")
-    st.dataframe(team_df)
+        # 드로수가 2의 거듭제곱인지 확인
+        if (draw_size & (draw_size - 1)) != 0:
+            st.warning(f"⚠️ 현재 {draw_size}개 팀 → 2ⁿ 형태가 아니에요. 브래킷이 비정형일 수 있습니다.")
 
-    if st.button("🎲 조 편성"):
-        team_df = team_df.sample(frac=1, random_state=42).reset_index(drop=True)
-        total = len(team_df)
-        num_full = total // 3
-        remainder = total % 3
+        rounds = int(math.log2(draw_size))
 
-        group_sizes = [3] * num_full
-        if remainder == 1 and num_full >= 1:
-            group_sizes[-1] = 2
-        elif remainder == 2:
-            group_sizes.append(2)
+        # 브래킷 시각화
+        fig, ax = plt.subplots(figsize=(12, draw_size * 0.45))
+        ax.set_xlim(0, rounds + 1)
+        ax.set_ylim(0, draw_size)
+        ax.axis('off')
 
-        group_labels = [chr(65 + i) + "조" for i in range(len(group_sizes))]
-        group_assignments = []
-        for i, size in enumerate(group_sizes):
-            group_assignments.extend([group_labels[i]] * size)
+        positions = {}
+        for i, name in enumerate(teams):
+            y = draw_size - i - 1
+            ax.text(0, y, name, va='center', fontsize=10)
+            positions[(0, i)] = y
 
-        # 길이 맞추기
-        while len(group_assignments) < len(team_df):
-            group_assignments.append('미정')
+        for r in range(1, rounds + 1):
+            step = 2 ** r
+            for m in range(0, draw_size, step):
+                left = positions.get((r - 1, m))
+                right = positions.get((r - 1, m + step // 2))
+                if left is not None and right is not None:
+                    mid = (left + right) / 2
+                    ax.plot([r - 1, r - 1], [left, right], color='black')
+                    ax.plot([r - 1, r], [mid, mid], color='black')
+                    positions[(r, m)] = mid
 
-        team_df['조'] = group_assignments
-        st.session_state.teams = team_df
-
-if st.session_state.teams is not None:
-    st.subheader("✅ 조 편성 결과")
-    st.dataframe(st.session_state.teams)
-
-    st.markdown("---")
-    st.header("🏆 본선 대진표 생성")
-
-    draw_size = st.selectbox("드로 수 선택", [4, 8, 16], index=1)
-
-    if st.button("🔀 본선 진출팀 랜덤 배정"):
-        df = st.session_state.teams
-        qualified = []
-        for group in df['조'].unique():
-            if group == '미정': continue
-            top2 = df[df['조'] == group].head(2)
-            qualified.extend(top2.to_dict(orient='records'))
-
-        qualified_df = pd.DataFrame(qualified).sample(frac=1, random_state=123).reset_index(drop=True)
-
-        # 부전승 채우기
-        needed = draw_size - len(qualified_df)
-        if needed > 0:
-            byes = [{'팀': 'BYE', '연락처': '', '조': ''}] * needed
-            qualified_df = pd.concat([qualified_df, pd.DataFrame(byes)], ignore_index=True)
-
-        qualified_df = qualified_df.sample(frac=1, random_state=99).reset_index(drop=True)
-        st.session_state.draw_teams = qualified_df
-
-if st.session_state.draw_teams is not None:
-    st.subheader("📄 본선 대진 참가 팀")
-    st.dataframe(st.session_state.draw_teams)
-
-    st.subheader("📊 본선 토너먼트 시각화")
-
-    labels = st.session_state.draw_teams['팀'].tolist()
-
-    def plot_bracket(labels):
-        fig = go.Figure()
-        y_gap = 20
-        x_gap = 1
-        current_positions = {i: (0, -i * y_gap) for i in range(len(labels))}
-
-        for i, label in current_positions.items():
-            fig.add_trace(go.Scatter(
-                x=[label[0]], y=[label[1]],
-                text=[labels[i]], mode='text', textposition='middle right'
-            ))
-
-        round_num = 0
-        while len(current_positions) > 1:
-            next_positions = {}
-            keys = list(current_positions.keys())
-            for i in range(0, len(keys), 2):
-                left = current_positions[keys[i]]
-                right = current_positions[keys[i+1]]
-                mid_y = (left[1] + right[1]) / 2
-                mid_x = left[0] + x_gap
-
-                # 연결선
-                fig.add_trace(go.Scatter(
-                    x=[left[0], mid_x], y=[left[1], mid_y],
-                    mode="lines", line=dict(color="black")
-                ))
-                fig.add_trace(go.Scatter(
-                    x=[right[0], mid_x], y=[right[1], mid_y],
-                    mode="lines", line=dict(color="black")
-                ))
-
-                next_positions[i//2] = (mid_x, mid_y)
-            current_positions = next_positions
-            round_num += 1
-
-        fig.update_layout(height=600, xaxis=dict(visible=False), yaxis=dict(visible=False), showlegend=False)
-        return fig
-
-    st.plotly_chart(plot_bracket(labels), use_container_width=True)
+        # 이미지 저장 & 출력
+        buf = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buf, format="png", dpi=150
