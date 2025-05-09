@@ -40,14 +40,19 @@ if uploaded_file:
 
         group_labels = [chr(65 + i) + "조" for i in range(len(group_sizes))]
 
-        # 조 배정 리스트 정확히 팀 수만큼 만들기
+        # 조 배정 리스트 만들고, 길이 맞추기
         group_assignments = []
-        i = 0
-        for size in group_sizes:
+        for i, size in enumerate(group_sizes):
             group_assignments.extend([group_labels[i]] * size)
-            i += 1
 
-        team_df['조'] = group_assignments[:len(team_df)]
+        # 길이 맞추기 (모자르면 '미정', 많으면 자름)
+        diff = len(team_df) - len(group_assignments)
+        if diff > 0:
+            group_assignments += ['미정'] * diff
+        elif diff < 0:
+            group_assignments = group_assignments[:len(team_df)]
+
+        team_df['조'] = group_assignments
         st.session_state.teams = team_df
 
 if st.session_state.teams is not None:
@@ -55,4 +60,5 @@ if st.session_state.teams is not None:
     st.dataframe(st.session_state.teams)
 
     csv = st.session_state.teams.to_csv(index=False).encode('utf-8-sig')
-    st.download_button("📤 결과 CSV 다운로드", data=csv, file_name="혼복_조편성결과.csv", mime='text/csv')
+    st.download_button("📤 결과 CSV 다운로드", data=csv, file_name="혼복_조편성결과.csv", mime="text/csv")
+
