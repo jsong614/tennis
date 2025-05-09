@@ -15,19 +15,21 @@ except:
     pass
 
 st.set_page_config(layout="wide")
-st.title("🎾 예선 순위 입력 + 본선 대진표 생성기 (브래킷 PNG)")
+st.title("🎾 예선 순위 입력 + 본선 대진표 생성기 (기존 CSV 포맷 사용)")
 
-uploaded_file = st.file_uploader("📥 CSV 업로드 (필드: 팀, 조)", type="csv")
+uploaded_file = st.file_uploader("📥 CSV 업로드 ('이름 1 (대표자)', '이름 2', '조' 포함)", type="csv")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
-    if not {'팀', '조'}.issubset(df.columns):
-        st.error("❗ '팀'과 '조' 열이 CSV에 포함되어야 합니다.")
+    if not {'이름 1 (대표자)', '이름 2', '조'}.issubset(df.columns):
+        st.error("❗ '이름 1 (대표자)', '이름 2', '조' 열이 CSV에 포함되어야 합니다.")
     else:
-        st.subheader("📌 각 조별 순위 입력")
+        # 팀 이름 생성
+        df['팀'] = df['이름 1 (대표자)'].astype(str) + " / " + df['이름 2'].astype(str)
         df['순위'] = None
 
+        st.subheader("📌 각 조별 순위 입력")
         for group in sorted(df['조'].dropna().unique()):
             st.markdown(f"### ⛳ {group}")
             teams_in_group = df[df['조'] == group]
@@ -78,5 +80,6 @@ if uploaded_file:
                 buf.seek(0)
                 image = Image.open(buf)
 
-                st.image(image, caption="📊 본선 대진표", use_column_width=True)
+                st.image(image, caption="📊 본선 대진표 (브래킷)", use_column_width=True)
                 st.download_button("📥 브래킷 PNG 다운로드", data=buf.getvalue(), file_name="bracket.png", mime="image/png")
+
