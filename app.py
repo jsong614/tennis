@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 
-st.title("🎾 테니스 대회 복식 조 편성기 (팀 단위, 2팀 조 허용)")
+st.title("🎾 테니스 대회 복식 조 편성기 (숫자 조 이름 + 2팀 조 허용)")
 
 uploaded_file = st.file_uploader("📥 CSV 파일 업로드", type="csv")
 
@@ -40,11 +40,15 @@ if uploaded_file:
         elif remainder == 2:
             group_sizes.append(2)
 
-        group_labels = [chr(65 + i) + "조" for i in range(len(group_sizes))]
+        # 숫자 조 이름 (1조, 2조, ...)
+        group_labels = [f"{i+1}조" for i in range(len(group_sizes))]
 
         group_assignments = []
         for i, size in enumerate(group_sizes):
             group_assignments.extend([group_labels[i]] * size)
+
+        # 혹시 모를 길이 차이 방지
+        group_assignments = group_assignments[:len(team_df)]
 
         team_df['조'] = group_assignments
         st.session_state.teams = team_df
